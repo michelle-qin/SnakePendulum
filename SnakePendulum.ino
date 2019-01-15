@@ -7,20 +7,20 @@
 ////// Creating and assigning variables ///////////
 
 #define TIMER_US 100000
-#define TICK_COUNTS 100    //SPS1  -- check, not sure how long to keep timer for 
-#define TICK_COUNTS1 200   //SPS2   
+#define TICK_COUNTS 900    //SPS1  
+#define TICK_COUNTS1 900   //SPS2   
 
 volatile long tick_count = TICK_COUNTS;
 volatile long tick_count1 = TICK_COUNTS1;
 volatile bool in_long_isr = false;
 
-#define SPS1_BUTTON_RED 23
-#define SPS1_BUTTON_GREEN 8
+#define SPS1_BUTTON_RED 8
+#define SPS1_BUTTON_GREEN 23
 #define SPS1_BUTTON 25
 #define SPS1_PISTON 10
 
-#define SPS2_BUTTON_RED 27
-#define SPS2_BUTTON_GREEN 26
+#define SPS2_BUTTON_RED 26
+#define SPS2_BUTTON_GREEN 27
 #define SPS2_BUTTON 29
 #define SPS2_PISTON 9   //check that this piston pin matches up with button pins for SPS2
 
@@ -88,7 +88,7 @@ void timerIsr()
 
   timerActive = true;
 
-  if (!(--tick_count))                             // Count to 10S
+  if (!(--tick_count))                             // Count to 90S
   {
     tick_count = TICK_COUNTS;                      // Reload
     tick_SPS1_isr();                                 // Call the beam routine
@@ -104,7 +104,7 @@ void timerIsr1()
 
   timer1Active = true;
 
-  if (!(--tick_count1))                             // Count to 20S
+  if (!(--tick_count1))                             // Count to 90S
   {
     tick_count1 = TICK_COUNTS1;                      // Reload
     tick_SPS2_isr();                                 // Call the beam routine
