@@ -7,8 +7,8 @@
 ////// Creating and assigning variables ///////////
 
 #define TIMER_US 100000
-#define TICK_COUNTS 900    //SPS1  
-#define TICK_COUNTS1 900   //SPS2   
+#define TICK_COUNTS 700    //SPS1 = YELLOW
+#define TICK_COUNTS1 1000   //SPS2 = RED   
 
 volatile long tick_count = TICK_COUNTS;
 volatile long tick_count1 = TICK_COUNTS1;
@@ -88,7 +88,7 @@ void timerIsr()
 
   timerActive = true;
 
-  if (!(--tick_count))                             // Count to 90S
+  if (!(--tick_count))                             // Count to 70S
   {
     tick_count = TICK_COUNTS;                      // Reload
     tick_SPS1_isr();                                 // Call the beam routine
@@ -104,7 +104,7 @@ void timerIsr1()
 
   timer1Active = true;
 
-  if (!(--tick_count1))                             // Count to 90S
+  if (!(--tick_count1))                             // Count to 100S
   {
     tick_count1 = TICK_COUNTS1;                      // Reload
     tick_SPS2_isr();                                 // Call the beam routine
@@ -153,9 +153,9 @@ void tick_SPS2_isr()
 }
 
 void updateSPS1State() {
-  Serial.println(SPS1State);
+  //Serial.println(SPS1State);
   SPS1State = !digitalRead(SPS1_BUTTON);
-  Serial.println(SPS1State);
+  //Serial.println(SPS1State);
 
   if (SPS1State != lastSPS1State && SPS1State == HIGH) {     //SPS1State is whether SPS1 button is on or off
     SPS1Count = !SPS1Count;   //if SPS1State is HIGH, make SPS1Count TRUE
@@ -174,18 +174,19 @@ void updateSPS1State() {
 void turnOffSPS1() {
   if (timerActive != true)
   {
-    digitalWrite(SPS1_BUTTON_GREEN, HIGH);
-    digitalWrite(SPS1_BUTTON_RED, LOW);
-
-    Serial.println("[debug] SPS1 off");
-    digitalWrite(SPS1_PISTON, LOW);  //turn piston off
-
     i = 0;  //this restarts the print time in serial monitor for SPS1
     tick_count = TICK_COUNTS;  //this restarts the beam timer to TICK_COUNTS
     //stop timer//
     Serial.println("[debug] SPS1 timer stops");
     Timer1.stop();
     //reset timer//
+
+    Serial.println("[debug] SPS1 off");
+    digitalWrite(SPS1_PISTON, LOW);  //turn piston off
+    delay(5000);
+
+    digitalWrite(SPS1_BUTTON_GREEN, HIGH);
+    digitalWrite(SPS1_BUTTON_RED, LOW);
   }
 
 }
@@ -198,12 +199,12 @@ void turnOnSPS1() {
     digitalWrite(SPS1_BUTTON_GREEN, LOW);
 
     Serial.println("[debug] SPS1 on");
-    Serial.print("PISTON: ");
-    Serial.println(pistonState);
+    //Serial.print("PISTON: ");
+    //Serial.println(pistonState);
     digitalWrite(SPS1_PISTON, HIGH);  //moves piston
     pistonState = !pistonState;
-    Serial.print("PISTON: ");
-    Serial.println(pistonState);
+    //Serial.print("PISTON: ");
+    //Serial.println(pistonState);
 
     tick_count = TICK_COUNTS;
     i = 0;
@@ -218,9 +219,9 @@ void turnOnSPS1() {
 }
 
 void updateSPS2State() {
-  Serial.println(SPS2State);
+  //Serial.println(SPS2State);
   SPS2State = !digitalRead(SPS2_BUTTON);
-  Serial.println(SPS2State);
+  //Serial.println(SPS2State);
 
   if (SPS2State != lastSPS2State && SPS2State == HIGH) {     //SPS2State is whether SPS1 button is on or off
     SPS2Count = !SPS2Count;   //if SPS2State is HIGH, make SPS2Count TRUE
@@ -239,18 +240,19 @@ void updateSPS2State() {
 void turnOffSPS2() {
   if (timer1Active != true)
   {
-    digitalWrite(SPS2_BUTTON_GREEN, HIGH);
-    digitalWrite(SPS2_BUTTON_RED, LOW);
-
-    Serial.println("[debug] SPS2 off");
-    digitalWrite(SPS2_PISTON, LOW);  //turn piston off
-
     g = 0;  //this restarts the print time in serial monitor for SPS2
     tick_count1 = TICK_COUNTS1;  //this restarts the motor timer to TICK_COUNTS1
     //stop timer//
     Serial.println("[debug] SPS2 timer stops");
     Timer3.stop();
     //reset timer//
+
+    Serial.println("[debug] SPS2 off");
+    digitalWrite(SPS2_PISTON, LOW);  //turn piston off
+    delay(5000);
+    
+    digitalWrite(SPS2_BUTTON_GREEN, HIGH);
+    digitalWrite(SPS2_BUTTON_RED, LOW);
   }
 }
 
@@ -261,12 +263,12 @@ void turnOnSPS2 () {
     digitalWrite(SPS2_BUTTON_GREEN, LOW);
 
     Serial.println("[debug] SPS2 on");
-    Serial.print("PISTON: ");
-    Serial.println(piston1State);
+    //Serial.print("PISTON: ");
+    //Serial.println(piston1State);
     digitalWrite(SPS2_PISTON, HIGH);  //moves piston
     piston1State = !piston1State;
-    Serial.print("PISTON: ");
-    Serial.println(piston1State);
+    //Serial.print("PISTON: ");
+    //Serial.println(piston1State);
 
     tick_count1 = TICK_COUNTS1;
     g = 0;
