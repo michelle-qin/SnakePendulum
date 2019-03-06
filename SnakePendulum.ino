@@ -7,12 +7,15 @@
 ////// Creating and assigning variables ///////////
 
 #define TIMER_US 100000
-#define TICK_COUNTS 700    //SPS1 = YELLOW
-#define TICK_COUNTS1 1000   //SPS2 = RED   
+#define SPS1_TICK_COUNTS 700    //SPS1 = YELLOW PENDULUM
+#define SPS2_TICK_COUNTS 1000   //SPS2 = RED PENDULUM
+#define SPS1_TIMER_DELAY 50
+#define SPS2_TIMER_DELAY 50
 
-volatile long tick_count = TICK_COUNTS;
-volatile long tick_count1 = TICK_COUNTS1;
-volatile bool in_long_isr = false;
+volatile long SPS1_tick_counts = SPS1_TICK_COUNTS;
+volatile long SPS2_tick_counts = SPS2_TICK_COUNTS;
+volatile long SPS1_timer_delay = SPS1_TIMER_DELAY;
+volatile long SPS2_timer_delay = SPS2_TIMER_DELAY;
 
 #define SPS1_BUTTON_RED 8
 #define SPS1_BUTTON_GREEN 23
@@ -24,22 +27,25 @@ volatile bool in_long_isr = false;
 #define SPS2_BUTTON 29
 #define SPS2_PISTON 9   //check that this piston pin matches up with button pins for SPS2
 
+#define OFF 0
+#define ON 1
+#define WAITING 2
+
 bool SPS1State = LOW;
-bool lastSPS1State = LOW;
-bool SPS1Count = false;
-
 bool SPS2State = LOW;
-bool lastSPS2State = LOW;
-bool SPS2Count = false;
 
-bool pistonState = LOW;
-bool piston1State = LOW;
-bool timerActive = false;
-bool timer1Active = false;
+bool SPS1_PistonState = LOW;
+bool SPS2_PistonState = LOW;
+bool timer_expired_70s = true;
+bool timer_expired_100s = true;
+bool SPS1delay_5s_expired = true;
+bool SPS2delay_5s_expired = true;
 
 //variables for keeping track of the current time in serial monitor//
-int i = 0;  //SPS1
-int g = 0;  //SPS2
+int SPS1_Counter = 0;  //SPS1
+int SPS2_Counter = 0;  //SPS2
+int SPS1_delay_counter;  //SPS1 delay
+int SPS2_delay_counter;  //SPS2 delay
 
 unsigned long startTime;
 
@@ -57,7 +63,7 @@ void setup() {
   pinMode(SPS2_BUTTON, INPUT_PULLUP);
   pinMode(SPS2_PISTON, OUTPUT);
 
-  ///////// Initialize Button Lights //////////
+  ///////// Initialize Button Lights and Piston //////////
 
   digitalWrite(SPS1_BUTTON_RED, LOW); //SPS1State initialized as low.
   digitalWrite(SPS1_BUTTON_GREEN, HIGH); //sets button light green
@@ -80,205 +86,276 @@ void loop() {
   }
 }
 
-void timerIsr()
+void SPS1_timerIsr()
 {
   Serial.print("[debug] time for SPS1 ");     //prints each 0.1 second, e.g. at "[debug] time 100", 10 seconds have passed.
-  Serial.println(i);
-  i++;
+  Serial.println(SPS1_Counter);
+  SPS1_Counter++;
 
-  timerActive = true;
-
-  if (!(--tick_count))                             // Count to 70S
+  if (!(--SPS1_tick_counts))                             // Count to 70S
   {
-    tick_count = TICK_COUNTS;                      // Reload
-    tick_SPS1_isr();                                 // Call the beam routine
+    SPS1_tick_counts = SPS1_TICK_COUNTS;                      // Reload
+    timer_expired_70s = true;                                 // this is going to trigger the control flow world to go to next state
   }
 
 }
 
-void timerIsr1()
+void SPS1_timerDelay()
+{
+  Serial.print("[debug] delay for SPS1 ");     //prints each 0.1 second, e.g. at "[debug] time 100", 10 seconds have passed.
+  Serial.println(SPS1_delay_counter);
+  SPS1_delay_counter++;
+
+  if (!(--SPS1_timer_delay))                             // Count to 5S
+  {
+    Serial.println(SPS1_timer_delay);
+    SPS1_timer_delay = SPS1_TIMER_DELAY;                      // Reload
+    SPS1delay_5s_expired = true;                                // this is going to trigger the control flow world to go to next state
+  }
+
+}
+
+void SPS2_timerIsr()
 {
   Serial.print("[debug] time for SPS2 ");     //prints each 0.1 second, e.g. at "[debug] time 100", 10 seconds have passed.
-  Serial.println(g);
-  g++;
+  Serial.println(SPS2_Counter);
+  SPS2_Counter++;
+  Serial.println(SPS2_tick_counts);
 
-  timer1Active = true;
-
-  if (!(--tick_count1))                             // Count to 100S
+  if (!(--SPS2_tick_counts))                             // Count to 100S
   {
-    tick_count1 = TICK_COUNTS1;                      // Reload
-    tick_SPS2_isr();                                 // Call the beam routine
+    SPS2_tick_counts = SPS2_TICK_COUNTS;                      // Reload
+    //JWF there was a double equal (==) on the line below
+    timer_expired_100s = true;           // this is going to trigger the control flow world to go to next state
   }
 
 }
 
-void tick_SPS1_isr()
+void SPS2_timerDelay()
 {
-  if (in_long_isr)
-    return;
+  Serial.print("[debug] delay for SPS2 ");     //prints each 0.1 second, e.g. at "[debug] time 100", 10 seconds have passed.
+  Serial.println(SPS2_delay_counter);
+  SPS2_delay_counter++;
 
-  in_long_isr = true;
+  if (!(--SPS2_timer_delay))                             // Count to 5S
+  {
+    SPS2_timer_delay = SPS2_TIMER_DELAY;                      // Reload
+    SPS2delay_5s_expired = true;                                   // this is going to trigger the control flow world to go to next state
+  }
 
-  volatile long i;
-
-  interrupts();
-
-  timerActive = false;
-  turnOffSPS1();
-  SPS1State = LOW;
-  SPS1Count = false;
-
-  noInterrupts();
-  in_long_isr = false;
 }
 
-void tick_SPS2_isr()
+void SPS1_ChangeToWaiting()
 {
-  if (in_long_isr)
-    return;
+  turnOffSPS1();
+  SPS1State = LOW;
+}
 
-  in_long_isr = true;
+void SPS1_ChangeToOff()
+{
+  Serial.println("[debug] SPS1 delay stops");
+  turnOffDelaySPS1();
+}
 
-  volatile long i;
-
-  interrupts();
-
-  timer1Active = false;
+void SPS2_ChangeToWaiting()
+{
   turnOffSPS2();
   SPS2State = LOW;
-  SPS2Count = false;
+}
 
-  noInterrupts();
-  in_long_isr = false;
+void SPS2_ChangeToOff()
+{
+  Serial.println("[debug] SPS2 delay stops");
+  turnOffDelaySPS2();
 }
 
 void updateSPS1State() {
-  //Serial.println(SPS1State);
-  SPS1State = !digitalRead(SPS1_BUTTON);
-  //Serial.println(SPS1State);
+  static int SPS1_control_state = OFF;
 
-  if (SPS1State != lastSPS1State && SPS1State == HIGH) {     //SPS1State is whether SPS1 button is on or off
-    SPS1Count = !SPS1Count;   //if SPS1State is HIGH, make SPS1Count TRUE
+  switch (SPS1_control_state) {
+    case OFF:
+      {
+        Serial.println("[debug] SPS1 in OFF state");
+        SPS1State = !digitalRead(SPS1_BUTTON); //read button
+        Serial.print("[debug] Button SPS1 is ");
+        Serial.println(SPS1State);
 
-    if (SPS1Count == false) {
-      turnOffSPS1();
-    }
-    else {
-      turnOnSPS1();
-    }
+        if (SPS1State == HIGH) {     //SPS1State is whether SPS1 button is on or off
+          turnOnSPS1();  //pushes piston and starts 70s timer
+          SPS1_control_state = ON;
+          Serial.println("[debug] set state to ON");
+        }
+        break;
+      }
+    case ON:
+      {
+        if (timer_expired_70s == true)
+        {
+          SPS1_ChangeToWaiting();
+          turnOnDelaySPS1();
+          Serial.println("[debug] SPS1 delay timer on");
+          SPS1_control_state = WAITING;
+        }
+        break;
+      }
+    case WAITING:
+      {
+        if (SPS1delay_5s_expired == true)
+        {
+          Serial.println("[debug] SPS1 5s delay timer expired");
+          SPS1_ChangeToOff();
+          SPS1_control_state = OFF;
+          //turnOffDelaySPS1();  //JWF added  -- MQ already in "ChangeToOff"
+        }
+        break;
+      }
   }
-
-  lastSPS1State = SPS1State;
-}
-
-void turnOffSPS1() {
-  if (timerActive != true)
-  {
-    i = 0;  //this restarts the print time in serial monitor for SPS1
-    tick_count = TICK_COUNTS;  //this restarts the beam timer to TICK_COUNTS
-    //stop timer//
-    Serial.println("[debug] SPS1 timer stops");
-    Timer1.stop();
-    //reset timer//
-
-    Serial.println("[debug] SPS1 off");
-    digitalWrite(SPS1_PISTON, LOW);  //turn piston off
-    delay(5000);
-
-    digitalWrite(SPS1_BUTTON_GREEN, HIGH);
-    digitalWrite(SPS1_BUTTON_RED, LOW);
-  }
-
 }
 
 void turnOnSPS1() {
-  if (timerActive != true)
-  {
-    //turn beam light on//
-    digitalWrite(SPS1_BUTTON_RED, HIGH);
-    digitalWrite(SPS1_BUTTON_GREEN, LOW);
+  //turn beam light on//
+  digitalWrite(SPS1_BUTTON_RED, HIGH);
+  digitalWrite(SPS1_BUTTON_GREEN, LOW);
 
-    Serial.println("[debug] SPS1 on");
-    //Serial.print("PISTON: ");
-    //Serial.println(pistonState);
-    digitalWrite(SPS1_PISTON, HIGH);  //moves piston
-    pistonState = !pistonState;
-    //Serial.print("PISTON: ");
-    //Serial.println(pistonState);
+  Serial.println("[debug] SPS1 on");
+  digitalWrite(SPS1_PISTON, HIGH);  //moves piston
+  SPS1_PistonState = !SPS1_PistonState;
+  
+  SPS1_tick_counts = SPS1_TICK_COUNTS;
+  SPS1_Counter = 0;
+  //start timer//
+  Serial.println("[debug] SPS1 timer starts");
+  Timer1.initialize(TIMER_US);
+  timer_expired_70s = false;
+  Timer1.attachInterrupt(SPS1_timerIsr);
+  //reset timers//
 
-    tick_count = TICK_COUNTS;
-    i = 0;
-    //start timer//
-    Serial.println("[debug] SPS1 timer starts");
-    Timer1.initialize(TIMER_US);
-    Timer1.attachInterrupt(timerIsr);
-    //reset timers//
+  //nothing happens when the SPS1 is in action
+}
 
-    //nothing happens when the SPS1 is in action
+void turnOffSPS1() {
+  SPS1_Counter = 0;  //this restarts the print time in serial monitor for SPS1
+  SPS1_tick_counts = SPS1_TICK_COUNTS;  //this restarts the beam timer to SPS1_TICK_COUNTS
+  //stop timer//
+  Serial.println("[debug] SPS1 timer stops");
+  Timer1.stop();
+
+  Serial.println("[debug] SPS1 off");
+  digitalWrite(SPS1_PISTON, LOW);  //turn piston off
+
+}
+
+void turnOnDelaySPS1() {
+  Serial.println("[debug] SPS1 delay on");
+  Timer1.initialize(TIMER_US);
+  SPS1delay_5s_expired = false;
+  SPS1_timer_delay = 50;
+  SPS1_delay_counter = 0;
+  Timer1.attachInterrupt(SPS1_timerDelay);
+}
+
+void turnOffDelaySPS1() {
+  SPS1_delay_counter = 0;  //this restarts the print time in serial monitor for SPS2
+  SPS1_timer_delay = SPS1_TIMER_DELAY;  //this restarts the motor timer to SPS1_TIMER_DELAY
+  //stop timer//
+  Timer1.stop();
+
+  digitalWrite(SPS1_BUTTON_GREEN, HIGH);
+  digitalWrite(SPS1_BUTTON_RED, LOW);
+}
+
+
+void updateSPS2State() {
+  static int SPS2_control_state = OFF;
+
+  switch (SPS2_control_state) {
+    case OFF:
+      {
+        //read button
+        SPS2State = !digitalRead(SPS2_BUTTON);
+
+        if (SPS2State == HIGH) {
+          turnOnSPS2();  //pushes piston and starts 70s timer
+          SPS2_control_state = ON;
+        }
+        break;
+      }
+    case ON:
+      {
+        if (timer_expired_100s == true)
+        {
+          SPS2_ChangeToWaiting();
+          Serial.println("SPS2 100s timer expired. Start 5 s delay.");
+          turnOnDelaySPS2();
+          SPS2_control_state = WAITING;
+        }
+        break;
+      }
+    case WAITING:
+      {
+        if (SPS2delay_5s_expired == true)
+        {
+          SPS2_ChangeToOff();
+          SPS2_control_state = OFF;
+          //turnOffDelaySPS2();   //JWF added -- MQalready in "ChangeToOff"
+        }
+        break;
+      }
   }
 }
 
-void updateSPS2State() {
-  //Serial.println(SPS2State);
-  SPS2State = !digitalRead(SPS2_BUTTON);
-  //Serial.println(SPS2State);
+void turnOnSPS2() {
+  digitalWrite(SPS2_BUTTON_RED, HIGH);
+  digitalWrite(SPS2_BUTTON_GREEN, LOW);
 
-  if (SPS2State != lastSPS2State && SPS2State == HIGH) {     //SPS2State is whether SPS1 button is on or off
-    SPS2Count = !SPS2Count;   //if SPS2State is HIGH, make SPS2Count TRUE
+  Serial.println("[debug] SPS2 on");
+  digitalWrite(SPS2_PISTON, HIGH);  //moves piston
+  SPS2_PistonState = !SPS2_PistonState;
+  
+  SPS2_tick_counts = SPS2_TICK_COUNTS;
+  SPS2_Counter = 0;
+  //start timer//
+  Serial.println("[debug] SPS2 timer starts");
+  Timer3.initialize(TIMER_US);
 
-    if (SPS2Count == false) {
-      turnOffSPS2();
-    }
-    else {
-      turnOnSPS2();
-    }
-  }
+  timer_expired_100s = false;
 
-  lastSPS2State = SPS2State;
+  Timer3.attachInterrupt(SPS2_timerIsr);
+  //reset timers//
+
+  //nothing happens when the SPS2 is in action
+
 }
 
 void turnOffSPS2() {
-  if (timer1Active != true)
-  {
-    g = 0;  //this restarts the print time in serial monitor for SPS2
-    tick_count1 = TICK_COUNTS1;  //this restarts the motor timer to TICK_COUNTS1
-    //stop timer//
-    Serial.println("[debug] SPS2 timer stops");
-    Timer3.stop();
-    //reset timer//
+  SPS2_Counter = 0;  //this restarts the print time in serial monitor for SPS2
+  SPS2_tick_counts = SPS2_TICK_COUNTS;  //this restarts the motor timer to SPS2_TICK_COUNTS
+  //stop timer//
+  Serial.println("[debug] SPS2 timer stops");
+  Timer3.stop();
+  //reset timer//
 
-    Serial.println("[debug] SPS2 off");
-    digitalWrite(SPS2_PISTON, LOW);  //turn piston off
-    delay(5000);
-    
-    digitalWrite(SPS2_BUTTON_GREEN, HIGH);
-    digitalWrite(SPS2_BUTTON_RED, LOW);
-  }
+  Serial.println("[debug] SPS2 off");
+  digitalWrite(SPS2_PISTON, LOW);  //turn piston off
 }
 
-void turnOnSPS2 () {
-  if (timer1Active != true)
-  {
-    digitalWrite(SPS2_BUTTON_RED, HIGH);
-    digitalWrite(SPS2_BUTTON_GREEN, LOW);
-
-    Serial.println("[debug] SPS2 on");
-    //Serial.print("PISTON: ");
-    //Serial.println(piston1State);
-    digitalWrite(SPS2_PISTON, HIGH);  //moves piston
-    piston1State = !piston1State;
-    //Serial.print("PISTON: ");
-    //Serial.println(piston1State);
-
-    tick_count1 = TICK_COUNTS1;
-    g = 0;
-    //start timer//
-    Serial.println("[debug] SPS2 timer starts");
-    Timer3.initialize(TIMER_US);
-    Timer3.attachInterrupt(timerIsr1);
-    //reset timers//
-
-    //nothing happens when the SPS2 is in action
-  }
+void turnOnDelaySPS2()
+{
+  Timer3.initialize(TIMER_US);
+  SPS2delay_5s_expired = false;
+  SPS1_timer_delay = 50;
+  SPS2_delay_counter = 0;
+  Timer3.attachInterrupt(SPS2_timerDelay);
 }
+
+void turnOffDelaySPS2() {
+  SPS2_delay_counter = 0;  //this restarts the print time in serial monitor for SPS2
+  SPS2_timer_delay = SPS2_TIMER_DELAY;  //this restarts the motor timer to SPS2_TIMER_DELAY
+  //stop timer//
+  Timer3.stop();
+
+  digitalWrite(SPS2_BUTTON_GREEN, HIGH);
+  digitalWrite(SPS2_BUTTON_RED, LOW);
+}
+
 
